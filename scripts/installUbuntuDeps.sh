@@ -161,30 +161,34 @@ install_opus(){
 
 install_mediadeps(){
   install_opus
-  sudo apt-get -qq install yasm libvpx. libx264.
-  if [ -d $LIB_DIR ]; then
-    cd $LIB_DIR
-    if [ ! -f ./v11.9.tar.gz ]; then
-      curl -O -L https://github.com/libav/libav/archive/v11.9.tar.gz
-      tar -zxvf v11.9.tar.gz
-      cd libav-11.9
-      PKG_CONFIG_PATH=${PREFIX_DIR}/lib/pkgconfig ./configure --prefix=$PREFIX_DIR --enable-shared --enable-gpl --enable-libvpx --enable-libx264 --enable-libopus --disable-doc
-      make $FAST_MAKE -s V=0
-      make install
-    else
-      echo "libav already installed"
-    fi
-    cd $CURRENT_DIR
-  else
-    mkdir -p $LIB_DIR
-    install_mediadeps
-  fi
+  sudo add-apt-repository ppa:jonathonf/ffmpeg-3
+  sudo apt update
+  sudo apt-get -qq install yasm libvpx. libx264. ffmpeg
+  # if [ -d $LIB_DIR ]; then
+  #   cd $LIB_DIR
+  #   if [ ! -f ./v11.9.tar.gz ]; then
+  #     curl -O -L https://github.com/libav/libav/archive/v11.9.tar.gz
+  #     tar -zxvf v11.9.tar.gz
+  #     cd libav-11.9
+  #     PKG_CONFIG_PATH=${PREFIX_DIR}/lib/pkgconfig ./configure --prefix=$PREFIX_DIR --enable-shared --enable-gpl --enable-libvpx --enable-libx264 --enable-libopus --disable-doc
+  #     make $FAST_MAKE -s V=0
+  #     make install
+  #   else
+  #     echo "libav already installed"
+  #   fi
+  #   cd $CURRENT_DIR
+  # else
+  #   mkdir -p $LIB_DIR
+  #   install_mediadeps
+  # fi
 
 }
 
 install_mediadeps_nogpl(){
   install_opus
-  sudo apt-get -qq install yasm libvpx.
+  sudo add-apt-repository ppa:jonathonf/ffmpeg-3
+  sudo apt update
+  sudo apt-get -qq install yasm libvpx. ffmpeg
   if [ -d $LIB_DIR ]; then
     cd $LIB_DIR
     if [ ! -f ./v11.9.tar.gz ]; then
