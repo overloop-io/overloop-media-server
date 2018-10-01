@@ -8,6 +8,9 @@ var express = require('express'),
     fs = require('fs'),
     https = require('https'),
     config = require('./../../licode_config');
+const aws = require('aws-sdk');
+const ffmpeg = require('fluent-ffmpeg');
+const stream = require('stream');
 
 var options = {
     key: fs.readFileSync('../../cert/key.pem').toString(),
@@ -55,6 +58,7 @@ var getOrCreateRoom = function (name, type = 'erizo', mediaConfiguration = 'defa
                                 callback = function() {}) {
 
     if (name === defaultRoomName && defaultRoom) {
+        console.log('Default room', defaultRoom);
         callback(defaultRoom);
         return;
     }
@@ -77,6 +81,8 @@ var getOrCreateRoom = function (name, type = 'erizo', mediaConfiguration = 'defa
 
         N.API.createRoom(name, function (roomID) {
             theRoom = roomID._id;
+            console.log('Creating room', roomID);
+            console.log(roomID.controller);
             callback(theRoom);
         }, function(){}, extra);
     });
@@ -177,6 +183,62 @@ app.post('/createToken/', function(req, res) {
 
 });
 
+
+app.use(function(req, res, next) {
+  if (req.method !== 'POST' || !req.path.startsWith('/livestream')) {
+    return next();
+  }
+
+  ffmpeg(req)
+    .outputOptions([
+      '-hls_time 5',
+      '-hls_playlist_type event',
+    ])
+    .output('http://localhost:3001/s3/testlive/master.m3u8')
+    .on('start', () => console.log('FFMpeg starting'))
+    .on('codecData', data => console.log('FFMpeg codec data: ', data))
+    .on('stderr', line => console.error(`STDERROR: ${line}`))
+    .on('progress', (progress) => console.log(`FFMpeg progress - frames: ${progress.frames}`))
+    .on('error', (err) => console.log(`FFMpeg error: ${err.message}`))
+    .on('end', () => console.log('FFMpeg end'))
+    .run();
+});
+
+const s3 = new aws.S3({
+  accessKeyId: process.env.AWS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_KEY,
+  region: process.env.AWS_REGION,
+});
+
+function uploadFromStream(filename, contentType) {
+  const pass = new stream.PassThrough();
+  const promise = new Promise((resolve, reject) => {
+    var params = {Bucket: process.env.AWS_BUCKET, Body: pass, Key: filename, ContentType: contentType };
+    s3.upload(params, function(err, data) {
+      if (err) {
+        return reject(err);
+      }
+      resolve(data);
+    });
+  });
+  return {
+    stream: pass,
+    promise: promise,
+  };
+}
+
+app.use(function (req, res, next) {
+  if (!req.path.startsWith('/s3') || !['PUT', 'POST'].includes(req.method)) {
+    return next();
+  }
+  const address = req.path.substring(4);
+  console.log('POST file to s3: ', address);
+  const upload = uploadFromStream(address, address.endsWith('.ts') ? 'video/MP2T' : 'application/x-mpegURL');
+  req.pipe(upload.stream)
+  upload.promise.then(function() {
+    res.sendStatus(200);
+  })
+});
 
 app.use(function(req, res, next) {
     res.header('Access-Control-Allow-Origin', '*');
