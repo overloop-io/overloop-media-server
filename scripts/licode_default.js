@@ -67,6 +67,11 @@ config.erizoController.port = 8080; //default value: 8080
 // Use true if clients communicate with erizoController over SSL
 config.erizoController.ssl = false; //default value: false
 
+config.erizoController.hostname = 'ingest-prod.ugcpro.tv'; //default value: ''
+config.erizoController.port = 8080; //default value: 8080
+// Use true if clients communicate with erizoController over SSL
+config.erizoController.ssl = true; //default value: false
+
 // This configuration is used by erizoController server to listen for connections
 // Use true if erizoController listens in HTTPS.
 config.erizoController.listen_ssl = false; //default value: false
@@ -165,6 +170,9 @@ config.erizo.numIOWorkers = 1;
 //Please note this is only needed if your server does not have a public IP
 config.erizo.stunserver = ''; // default value: ''
 config.erizo.stunport = 0; // default value: 0
+
+config.erizo.stunserver = 'stun:stun.l.google.com'; // default value: ''
+config.erizo.stunport = 19302; // default value: 0
 
 //TURN server IP address and port to be used by the server.
 //Please note this is not needed in most cases, setting TURN in erizoController for the clients

@@ -161,6 +161,10 @@ if [ "$NUVE" == "true" ]; then
   run_nuve
 fi
 
+# OMS - autodiscover own external ip
+PUBLIC_IP=$(curl ipinfo.io/ip)
+# end OMS
+
 if [ "$ERIZOCONTROLLER" == "true" ]; then
   echo "config.erizoController.publicIP = '$PUBLIC_IP';" >> /opt/licode/licode_config.js
   run_erizoController
