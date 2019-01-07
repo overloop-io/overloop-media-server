@@ -3,6 +3,12 @@
 var serverUrl = '/';
 var localStream, room, recording, recordingId;
 
+function setVideoData() {
+  document.querySelector('#videoData').style.display = 'none';
+  document.querySelector('#results').style.display = '';
+  run();
+}
+
 function getParameterByName(name) {
   name = name.replace(/[\[]/, '\\\[').replace(/[\]]/, '\\\]');
   var regex = new RegExp('[\\?&]' + name + '=([^&#]*)'),
@@ -45,7 +51,27 @@ function toggleSlideShowMode() {  // jshint ignore:line
   });
 }
 
-window.onload = function () {
+var createToken = function(roomData, callback) {
+
+  var req = new XMLHttpRequest();
+  var url = serverUrl + 'streams/' + document.querySelector('#videoId').value;
+
+  req.onreadystatechange = function () {
+    if (req.readyState === 4) {
+      callback(JSON.parse(req.responseText).data.token);
+    }
+  };
+
+  req.open('POST', url, true);
+  req.setRequestHeader('Content-Type', 'application/json');
+  req.send(JSON.stringify({
+    data: {
+      token: document.querySelector('#token').value,
+    },
+  }));
+};
+
+var run = function () {
   recording = false;
   var screen = getParameterByName('screen');
   var roomName = getParameterByName('room') || 'basicExampleRoom';
@@ -60,7 +86,7 @@ window.onload = function () {
                 data: true,
                 screen: screen,
                 videoSize: [640, 480, 640, 480],
-                videoFrameRate: [10, 20]};
+                videoFrameRate: [10, 60]};
   // If we want screen sharing we have to put our Chrome extension id.
   // The default one only works in our Lynckia test servers.
   // If we are not using chrome, the creation of the stream will fail regardless.
@@ -68,21 +94,6 @@ window.onload = function () {
     config.extensionId = 'okeephmleflklcdebijnponpabbmmgeo';
   }
   localStream = Erizo.Stream(config);
-  var createToken = function(roomData, callback) {
-
-    var req = new XMLHttpRequest();
-    var url = serverUrl + 'createToken/';
-
-    req.onreadystatechange = function () {
-      if (req.readyState === 4) {
-        callback(req.responseText);
-      }
-    };
-
-    req.open('POST', url, true);
-    req.setRequestHeader('Content-Type', 'application/json');
-    req.send(JSON.stringify(roomData));
-  };
 
   var roomData  = {username: 'user',
                    role: 'presenter',

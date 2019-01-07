@@ -225,6 +225,9 @@ class Client extends events.EventEmitter {
             } else if (signMess.type === 'ready') {
                 st.status = PUBLISHER_READY;
                 this.room.sendMessage('onAddStream', st.getPublicStream());
+                this.onStartRecorder({to: id}, function() {
+                  console.log('Start recorder callback', arguments);
+                });
                 log.info('message: addPublisher, ' +
                          'state: PUBLISHER_READY, ' +
                          'streamId: ' + id + ', ' +
@@ -358,7 +361,7 @@ class Client extends events.EventEmitter {
         return;
     }
     var streamId = options.to;
-    var recordingId = Math.random() * 1000000000000000000;
+    var recordingId = this.room.id;//Math.random() * 1000000000000000000;
     var url;
 
     if (global.config.erizoController.recording_path) {  // jshint ignore:line

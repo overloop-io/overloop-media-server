@@ -269,7 +269,7 @@ window.onload = function () {
 
         req.onreadystatechange = function () {
             if (req.readyState === 4) {
-                callback(req.responseText);
+                callback(JSON.parse(req.responseText).data.token);
             }
         };
 

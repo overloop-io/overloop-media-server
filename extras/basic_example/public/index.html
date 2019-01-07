@@ -6,9 +6,16 @@
   </head>
 
   <body>
-    <button id="recordButton" onclick="startRecording()" disabled>Toggle Recording</button>
-    <button id="testConnection" onclick="testConnection()">Test Connection</button>
-    <button id="slideShowMode" onclick="toggleSlideShowMode()">Toggle Slide Show Mode</button>
-    <div id="videoContainer"></div>
+    <div id="videoData">
+      <input id="videoId" placeholder="video id" />
+      <input id="token" placeholder="not used" />
+      <button onclick="setVideoData()">Go</button>
+    </div>
+    <div id="results" style="display: none;">
+      <button id="recordButton" onclick="startRecording()" disabled>Toggle Recording</button>
+      <button id="testConnection" onclick="testConnection()">Test Connection</button>
+      <button id="slideShowMode" onclick="toggleSlideShowMode()">Toggle Slide Show Mode</button>
+      <div id="videoContainer"></div>
+    </div>
   </body>
 </html>
