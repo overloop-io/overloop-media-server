@@ -17,10 +17,12 @@ PliPacerHandler::PliPacerHandler(std::shared_ptr<erizo::Clock> the_clock)
       video_sink_ssrc_{0}, video_source_ssrc_{0}, fir_seq_number_{0} {}
 
 void PliPacerHandler::enable() {
+  ELOG_DEBUG("PliPacerHandler enabled");
   enabled_ = true;
 }
 
 void PliPacerHandler::disable() {
+  ELOG_DEBUG("PliPacerHandler disabled");
   enabled_ = false;
 }
 
@@ -35,15 +37,27 @@ void PliPacerHandler::notifyUpdate() {
 
 void PliPacerHandler::read(Context *ctx, std::shared_ptr<DataPacket> packet) {
   if (enabled_ && packet->is_keyframe) {
+    ELOG_DEBUG("Received keyframe");
     time_last_keyframe_ = clock_->now();
     waiting_for_keyframe_ = false;
     stream_->getWorker()->unschedule(scheduled_pli_);
-    scheduled_pli_ = std::make_shared<ScheduledTaskReference>();
+    // scheduled_pli_ = std::make_shared<ScheduledTaskReference>();
+    std::weak_ptr<PliPacerHandler> weak_this = shared_from_this();
+    scheduled_pli_ = stream_->getWorker()->scheduleFromNow([weak_this] {
+      if (auto this_ptr = weak_this.lock()) {
+        ELOG_DEBUG("PLI Schedule 2 got lock");
+        this_ptr->waiting_for_keyframe_ = true;
+        this_ptr->scheduleNextPLI();
+      } else {
+        ELOG_DEBUG("PLI Schedule 2 failed to lock");
+      }
+    }, kKeyframeTimeout / 2);
   }
   ctx->fireRead(std::move(packet));
 }
 
 void PliPacerHandler::sendPLI() {
+  ELOG_DEBUG("Sending PLI");
   getContext()->fireWrite(RtpUtils::createPLI(video_source_ssrc_, video_sink_ssrc_));
   scheduleNextPLI();
 }
@@ -59,16 +73,23 @@ void PliPacerHandler::sendFIR() {
 
 void PliPacerHandler::scheduleNextPLI() {
   if (!waiting_for_keyframe_ || !enabled_) {
+    ELOG_DEBUG("PLI Schedule ignored");
     return;
   }
+  ELOG_DEBUG("PLI Scheduled");
   std::weak_ptr<PliPacerHandler> weak_this = shared_from_this();
   scheduled_pli_ = stream_->getWorker()->scheduleFromNow([weak_this] {
     if (auto this_ptr = weak_this.lock()) {
+      ELOG_DEBUG("PLI Schedule got lock");
       if (this_ptr->clock_->now() - this_ptr->time_last_keyframe_ >= kKeyframeTimeout) {
         this_ptr->sendFIR();
+        ELOG_DEBUG("PLI sent FIR");
         return;
       }
       this_ptr->sendPLI();
+      ELOG_DEBUG("PLI sent PLI");
+    } else {
+      ELOG_DEBUG("PLI Schedule failed to lock");
     }
   }, kMinPLIPeriod);
 }
