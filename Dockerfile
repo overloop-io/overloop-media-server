@@ -9,11 +9,11 @@ RUN  apt-get update && apt-get install -y git wget curl
 
 COPY .nvmrc package.json /opt/licode/
 
-COPY scripts/installUbuntuDeps.sh scripts/installErizo.sh scripts/checkNvm.sh /opt/licode/scripts/
+COPY scripts/installUbuntuDeps.sh scripts/installErizo.sh scripts/checkNvm.sh scripts/libnice-014.patch0 /opt/licode/scripts/
 
 WORKDIR /opt/licode/scripts
 
-RUN ./installUbuntuDeps.sh --cleanup --fast
+RUN ./installUbuntuDeps.sh --cleanup --fast --enable-gpl
 
 WORKDIR /opt/licode
 
@@ -22,6 +22,7 @@ COPY erizo_controller/ /opt/licode/erizo_controller/
 COPY erizoAPI/ /opt/licode/erizoAPI/
 COPY spine/ /opt/licode/spine/
 COPY .eslintrc .eslintignore /opt/licode/
+COPY scripts/rtp_media_config_default.js /opt/licode/scripts/
 RUN ./scripts/installErizo.sh -dfeacs
 
 COPY nuve/ /opt/licode/nuve

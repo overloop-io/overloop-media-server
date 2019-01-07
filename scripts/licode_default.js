@@ -52,8 +52,8 @@ config.erizoController = {};
 config.erizoController.iceServers = [{'url': 'stun:stun.l.google.com:19302'}]; // default value: [{'url': 'stun:stun.l.google.com:19302'}]
 
 // Default and max video bandwidth parameters to be used by clients for both published and subscribed streams
-config.erizoController.defaultVideoBW = 300; //default value: 300
-config.erizoController.maxVideoBW = 300; //default value: 300
+config.erizoController.defaultVideoBW = 3000; //default value: 300
+config.erizoController.maxVideoBW = 3000; //default value: 300
 
 // Public erizoController IP for websockets (useful when behind NATs)
 // Use '' to automatically get IP from the interface
@@ -66,11 +66,6 @@ config.erizoController.hostname = ''; //default value: ''
 config.erizoController.port = 8080; //default value: 8080
 // Use true if clients communicate with erizoController over SSL
 config.erizoController.ssl = false; //default value: false
-
-config.erizoController.hostname = 'ingest-prod.ugcpro.tv'; //default value: ''
-config.erizoController.port = 8080; //default value: 8080
-// Use true if clients communicate with erizoController over SSL
-config.erizoController.ssl = true; //default value: false
 
 // This configuration is used by erizoController server to listen for connections
 // Use true if erizoController listens in HTTPS.
@@ -89,15 +84,21 @@ config.erizoController.exitOnNuveCheckFail = false;  // default value: false
 config.erizoController.allowSinglePC = false;  // default value: false
 config.erizoController.maxErizosUsedByRoom = 100;  // default value: 100
 
-config.erizoController.warning_n_rooms = 15; // default value: 15
-config.erizoController.limit_n_rooms = 20; // default value: 20
+config.erizoController.warning_n_rooms = 1500; // default value: 15
+config.erizoController.limit_n_rooms = 2000; // default value: 20
 config.erizoController.interval_time_keepAlive = 1000; // default value: 1000
 
 // Roles to be used by services
 config.erizoController.roles =
-{"presenter": {"publish": true, "subscribe": true, "record": true, "stats": true, "controlhandlers": true},
+{
+    "presenter": {"publish": true, "subscribe": true, "record": true, "stats": true, "controlhandlers": true},
     "viewer": {"subscribe": true},
-    "viewerWithData": {"subscribe": true, "publish": {"audio": false, "video": false, "screen": false, "data": true}}}; // default value: {"presenter":{"publish": true, "subscribe":true, "record":true}, "viewer":{"subscribe":true}, "viewerWithData":{"subscribe":true, "publish":{"audio":false,"video":false,"screen":false,"data":true}}}
+    "viewerWithData": {"subscribe": true, "publish": {"audio": false, "video": false, "screen": false, "data": true}},
+    admin: {
+        subscribe: true,
+        stats: true,
+    },
+}; // default value: {"presenter":{"publish": true, "subscribe":true, "record":true}, "viewer":{"subscribe":true}, "viewerWithData":{"subscribe":true, "publish":{"audio":false,"video":false,"screen":false,"data":true}}}
 
 // If true, erizoController sends report to rabbitMQ queue "report_handler"
 config.erizoController.report = {
@@ -143,7 +144,7 @@ config.erizoAgent.networkinterface = ''; //default value: ''
 config.erizoAgent.useIndividualLogFiles = false;
 
 // If true this Agent will launch Debug versions of ErizoJS
-config.erizoAgent.launchDebugErizoJS = false;
+config.erizoAgent.launchDebugErizoJS = true;
 
 // Custom log directory for agent instance log files.
 // If useIndividualLogFiles is enabled, files will go here

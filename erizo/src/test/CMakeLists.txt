@@ -14,6 +14,7 @@ link_directories("${GMOCK_BUILD}/lib")
 add_executable(tests ${ERIZO_TEST_SOURCES})
 
 include_directories("${ERIZO_SOURCE_DIR}" "${THIRD_PARTY_INCLUDE}" "${GMOCK_BUILD}/include" "${NICER_INCLUDE}")
+add_dependencies(tests gtest)
 target_link_libraries(tests erizo gtest_main gmock_main)
 
 add_test(NAME all

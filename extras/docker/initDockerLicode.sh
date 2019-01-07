@@ -131,6 +131,8 @@ run_basicExample() {
   sleep 5
   cp $ROOT/nuve/nuveClient/dist/nuve.js $EXTRAS/basic_example/
   cd $EXTRAS/basic_example
+  nvm use 8
+  node -v
   node basicServer.js &
 }
 
@@ -162,7 +164,17 @@ if [ "$NUVE" == "true" ]; then
 fi
 
 # OMS - autodiscover own external ip
-PUBLIC_IP=$(curl ipinfo.io/ip)
+if [ "$OMS_DETECT_IP" == "true" ]; then
+  PUBLIC_IP=$(curl ipinfo.io/ip)
+fi
+# end OMS
+
+# OMS - set up url from environment variables
+if [ -n "$OMS_PUBLIC_DOMAIN" ]; then
+  echo "config.erizoController.hostname = '$OMS_PUBLIC_DOMAIN';" >> /opt/licode/licode_config.js
+  echo "config.erizoController.port = 443;" >> /opt/licode/licode_config.js
+  echo "config.erizoController.ssl = true;" >> /opt/licode/licode_config.js
+fi
 # end OMS
 
 if [ "$ERIZOCONTROLLER" == "true" ]; then

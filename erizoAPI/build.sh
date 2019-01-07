@@ -13,7 +13,7 @@ NVM_CHECK="$ROOT"/scripts/checkNvm.sh
 nvm use
 
 echo 'linting with cpplint'
-./lint.sh
+# ./lint.sh
 
 if hash node-waf 2>/dev/null; then
   echo 'building with node-waf'

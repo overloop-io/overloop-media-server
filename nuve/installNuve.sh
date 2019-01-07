@@ -28,7 +28,7 @@ fi
 
 nvm use
 npm install --loglevel error amqp express mongojs$MONGO_VERSION aws-sdk log4js@1.0.1 node-getopt body-parser
-npm install --loglevel error -g google-closure-compiler-js
+npm install --loglevel error -g google-closure-compiler-js@20170521.0.0
 echo [nuve] Done, node_modules installed
 
 cd ../nuveClient/tools
