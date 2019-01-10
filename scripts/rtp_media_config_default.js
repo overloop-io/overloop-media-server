@@ -168,7 +168,7 @@ const telephoneevent = {
 };
 
 mediaConfig.codecConfigurations = {
-  default: { rtpMappings: { vp8, opus }, extMappings },
+  default: { rtpMappings: { h264, opus }, extMappings },
   VP8_AND_OPUS: { rtpMappings: { vp8, opus }, extMappings },
   VP9_AND_OPUS: { rtpMappings: { vp9, opus }, extMappings },
   H264_AND_OPUS: { rtpMappings: { h264, opus }, extMappings },
