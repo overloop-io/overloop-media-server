@@ -132,7 +132,7 @@ if (global.config.erizoController.listen_ssl) {  // jshint ignore:line
 }
 
 server.listen(global.config.erizoController.listen_port); // jshint ignore:line
-var io = require('socket.io').listen(server, {log:false});
+var io = require('socket.io').listen(server, {log:true});
 
 io.set('transports', ['websocket']);
 

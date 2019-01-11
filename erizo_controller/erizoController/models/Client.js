@@ -56,6 +56,7 @@ class Client extends events.EventEmitter {
   }
 
   sendMessage(type, arg) {
+    console.log(type, arg);
     this.channel.sendMessage(type, arg);
   }
 

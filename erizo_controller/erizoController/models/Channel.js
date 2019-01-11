@@ -111,7 +111,10 @@ class Channel extends events.EventEmitter {
   }
 
   socketOn(eventName, listener) {
-    this.socket.on(eventName, listener);
+    this.socket.on(eventName, (...args) => {
+      console.log('Socket message', ...args);
+      listener(...args);
+    });
   }
 
   onReconnected(clientId) {
