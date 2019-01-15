@@ -14,8 +14,6 @@ const stream = require('stream');
 const fetch = require('node-fetch');
 const jwt = require('jsonwebtoken');
 
-const roomIdToVideo = {};
-
 var options = {
     key: fs.readFileSync('../../cert/key.pem').toString(),
     cert: fs.readFileSync('../../cert/cert.pem').toString()
@@ -39,6 +37,7 @@ app.use(morgan('dev'));
 app.use(express.static(__dirname + '/public'));
 
 app.use(bodyParser.json());
+app.use(bodyParser.text());
 app.use(bodyParser.urlencoded({
     extended: true
 }));
@@ -118,6 +117,188 @@ var deleteRoomsIfEmpty = function (theRooms, callback) {
     });
 };
 
+class Stream {
+  constructor(videoData, token) {
+    this.id = videoData.identifier;
+    this.videoData = videoData;
+    this.token = token;
+    this.tokenData = jwt.decode(token);
+    this.fileUploads = {};
+    this.manifests = [];
+  }
+
+  async getRoom() {
+    console.log(`looking for room ${this.id}`)
+    const room = await getOrCreateRoom(this.id);
+    Stream.byRoomId[room] = this;
+    console.log(`Room ${room}`);
+    return room;
+  }
+
+  async createToken() {
+    const room = await this.getRoom()
+    const token = await new Promise((resolve, reject) => {
+      N.API.createToken(room, `${this.tokenData.userType}:${this.tokenData.uid}`, 'presenter', resolve, reject)
+    })
+    return token;
+  }
+
+  _waitForFileUpload(filename) {
+    if (!this.fileUploads[filename]) {
+      let resolve
+      let reject
+      const promise = new Promise((_resolve, _reject) => {
+        resolve = _resolve
+        reject = _reject
+      });
+      this.fileUploads[filename] = {
+        resolve,
+        reject,
+        promise,
+      }
+    }
+
+    return this.fileUploads[filename].promise
+  }
+
+  async _upload(filename, fileType, body) {
+    this._waitForFileUpload(filename)
+    const address = `${this.id}/${filename}`;
+    console.log(`Uploading ${address} as ${fileType}`)
+    await uploadS3(address, fileType, body)
+    console.log('Upload complete');
+    while (true) {
+      let res = await fetch(`https://live-test.ugcpro.tv/${address}`);
+      console.log(`Checking ${address} - ${res.status}`);
+      if (res.status == 200) {
+        this.fileUploads[filename].resolve()
+        return
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  async _uploadPipe(filename, fileType, req) {
+    this._waitForFileUpload(filename)
+    const address = `${this.id}/${filename}`;
+    console.log(`Uploading ${address} as ${fileType}`)
+    const pass = new stream.PassThrough()
+    const upload = this._upload(address, fileType, pass)
+    req.pipe(pass)
+    await upload
+  }
+
+  async handleManifest(req) {
+    let resolve
+    let promise = new Promise((_resolve) => resolve = _resolve)
+    let body = ''
+    req.on('data', data => body += data)
+    req.on('close', resolve)
+    await promise
+    const lines = body.split('\n').filter(str => str)
+    const files = lines.filter(str => str[0] != '#')
+    // const files = [];
+    console.log(`Updating manifest: ${files}`)
+    await Promise.all(files.map(key => this.fileUploads[key]))
+    await this._upload('master.m3u8', 'video/MP2T', body)
+    console.log('Manifest uploaded')
+    if (lines[lines.length - 1] === '#EXT-X-ENDLIST') {
+      console.log('Finishing')
+      await this.finish()
+    } else {
+      await this.setReady()
+    }
+  }
+
+  async handleFile(filename, req) {
+    if (!filename.endsWith('ts')) {
+      return this.handleManifest(req);
+    }
+    let fileType = 'application/x-mpegURL'
+    await this._uploadPipe(filename, fileType, req);
+  }
+
+  async setReady() {
+    if (this.videoData.contentState === 'READY') {
+      console.log(`Video ${this.id} is already READY`)
+      return
+    }
+    const response = await fetch(`${process.env.API_URL}/videos/${this.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        data: {
+          contentState: 'READY',
+          contentUrl: `${process.env.PLAYOUT_URL}/${this.id}/master.m3u8`,
+          liveStreamStatus: 'STARTED',
+        }
+      }),
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'x-token': this.token
+      }
+    });
+    if (response.status !== 200) {
+      const error = await response.text()
+      console.log(`Failed to set the live stream status to READY: ${response.status}, ${error}`)
+    }
+    let data = await response.json();
+    this.videoData = data.data;
+    console.log(`Set video ${this.id} as READY`);
+    return;
+  }
+
+  async finish() {
+    const response = await fetch(`${process.env.API_URL}/videos/${this.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        data: {
+          liveStreamStatus: 'ENDED',
+          audience: {
+            audienceType: 'PRIVATE',
+          },
+        },
+      }),
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'x-token': this.token
+      }
+    });
+    if (response.status !== 200) {
+      const error = await response.text();
+      console.log(`Failed to set the live stream status to ENDED: ${response.status}, ${error}`)
+    }
+    console.log(`Finished stream ${this.id}`);
+    delete Stream.byVideoId[this.id];
+    delete Stream.byRoomId[await getRoom()];
+  }
+}
+
+Stream.byVideoId = {};
+Stream.byRoomId = {};
+
+Stream.create = async function(id, token) {
+  if (!Stream.byVideoId[id]) {
+    const response = await fetch(`${process.env.API_URL}/videos/${id}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'x-token': token
+      }
+    })
+    if (response.status !== 200) {
+      console.log('Video check failed: ', response.status, await response.text());
+      throw new Error('Unknown video');
+    }
+    const {
+      data: video,
+    } = await response.json()
+    Stream.byVideoId[id] = new Stream(video, token);
+  }
+  return Stream.byVideoId[id];
+}
+
 app.post('/streams/:id', async function(req, res, next) {
   try {
     if (
@@ -131,48 +312,13 @@ app.post('/streams/:id', async function(req, res, next) {
       const { token } = req.body.data;
       console.log(id, token, process.env.API_URL);
       console.log(`Request to add callback for ${id}`)
-      const response = await fetch(`${process.env.API_URL}/videos/${id}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'x-token': token
-        }
-      })
-      if (response.status !== 200) {
-        console.log('Video check failed: ', response.status, await response.text());
-        return res.status(404).send('Unknown video')
-      }
-      const {
-        data: video,
-      } = await response.json()
-      const {
-        uid,
-        userType,
-      } = jwt.decode(token);
-      // if (video.playerType !== 'LIVE' || video.liveStreamStatus !== 'READY') {
-      //   return res.status(400).json({
-      //     error: `Video type is invalid. Expected (LIVE, READY) found (${video.playerType}, ${video.liveStreamStatus})`
-      //   })
-      // }
 
-      N.API.createRoom(id, function (room) {
-        console.log('Creating room', room);
-        roomIdToVideo[room._id] = {
-          room,
-          videoId: id,
-          token,
-        };
-        N.API.createToken(room._id, `${userType}:${uid}`, 'presenter', function(room_token) {
-          console.log('Token created', room_token);
-          res.json({
-            data: {
-              token: room_token,
-            },
-          });
-        }, function(error) {
-          console.log('Error creating token', error);
-          res.status(401).send('No Erizo Controller found');
-        });
+      const stream = await Stream.create(id, token);
+
+      res.json({
+        data: {
+          token: await stream.createToken(),
+        },
       });
     } else {
       res.status(404).send('Missing Param')
@@ -214,10 +360,7 @@ let streams = 0;
 setInterval(() => console.log(`Active stream count: ${streams}`), 5000);
 app.use('/livestream/:filename', function(req, res, next) {
   const roomId = req.params.filename.split('.')[0]
-  const {
-    token,
-    videoId,
-  } = roomIdToVideo[roomId];
+  const stream = Stream.byRoomId[roomId];
   ffmpeg(req)
     .inputOptions([
       // '-v debug',
@@ -231,29 +374,29 @@ app.use('/livestream/:filename', function(req, res, next) {
       '-hls_playlist_type event',
       '-max_muxing_queue_size 10240',
     ])
-    .output(`http://localhost:3001/s3/${videoId}/master.m3u8`)
+    .output(`http://localhost:3001/s3/${roomId}/master.m3u8`)
     .on('start', () => {
       console.log('FFMpeg starting')
       streams ++;
-      fetch(`${process.env.API_URL}/videos/${videoId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          data: {
-            contentState: 'READY',
-            contentUrl: `${process.env.PLAYOUT_URL}/${videoId}/master.m3u8`,
-            liveStreamStatus: 'STARTED',
-          }
-        }),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'x-token': token
-        }
-      }).then(response => {
-        if (response.status !== 200) {
-          response.text().then(text => console.log('Failed to set the live stream status:', response.status, text))
-        }
-      })
+      // fetch(`${process.env.API_URL}/videos/${videoId}`, {
+      //   method: 'PUT',
+      //   body: JSON.stringify({
+      //     data: {
+      //       contentState: 'READY',
+      //       contentUrl: `${process.env.PLAYOUT_URL}/${videoId}/master.m3u8`,
+      //       liveStreamStatus: 'STARTED',
+      //     }
+      //   }),
+      //   headers: {
+      //     'Accept': 'application/json',
+      //     'Content-Type': 'application/json',
+      //     'x-token': token
+      //   }
+      // }).then(response => {
+      //   if (response.status !== 200) {
+      //     response.text().then(text => console.log('Failed to set the live stream status:', response.status, text))
+      //   }
+      // })
     })
     .on('codecData', data => console.log('FFMpeg codec data: ', data))
     .on('stderr', line => console.error(`STDERROR: ${line}`))
@@ -262,22 +405,22 @@ app.use('/livestream/:filename', function(req, res, next) {
     .on('end', () => {
       console.log('FFMpeg end')
       streams --;
-      fetch(`${process.env.API_URL}/videos/${videoId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          data: {
-            liveStreamStatus: 'ENDED',
-            audience: {
-              audienceType: 'PRIVATE',
-            },
-          },
-        }),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'x-token': token
-        }
-      })
+      // fetch(`${process.env.API_URL}/videos/${videoId}`, {
+      //   method: 'PUT',
+      //   body: JSON.stringify({
+      //     data: {
+      //       liveStreamStatus: 'ENDED',
+      //       audience: {
+      //         audienceType: 'PRIVATE',
+      //       },
+      //     },
+      //   }),
+      //   headers: {
+      //     'Accept': 'application/json',
+      //     'Content-Type': 'application/json',
+      //     'x-token': token
+      //   }
+      // })
     })
     .run();
   req.on('end', function() {
@@ -296,10 +439,9 @@ const s3 = new aws.S3({
   region: process.env.AWS_REGION,
 });
 
-function uploadFromStream(filename, contentType) {
-  const pass = new stream.PassThrough();
-  const promise = new Promise((resolve, reject) => {
-    var params = {Bucket: process.env.AWS_BUCKET, Body: pass, Key: filename, ContentType: contentType };
+function uploadS3(filename, contentType, body) {
+  return new Promise((resolve, reject) => {
+    var params = {Bucket: process.env.AWS_BUCKET, Body: body, Key: filename, ContentType: contentType };
     s3.upload(params, function(err, data) {
       if (err) {
         return reject(err);
@@ -307,20 +449,25 @@ function uploadFromStream(filename, contentType) {
       resolve(data);
     });
   });
-  return {
-    stream: pass,
-    promise: promise,
-  };
 }
 
-app.use('/s3', function (req, res) {
-  const address = req.path.substring(1);
-  console.log('POST file to s3: ', address);
-  const upload = uploadFromStream(address, address.endsWith('.ts') ? 'video/MP2T' : 'application/x-mpegURL');
-  req.pipe(upload.stream)
-  upload.promise.then(function() {
+app.use('/s3/:roomId/:filename', async function (req, res, next) {
+  try {
+    const address = req.path.substring(1)
+    console.log('POST file to s3: ', address)
+    const { roomId, filename } = req.params
+    const stream = Stream.byRoomId[roomId]
+    await stream.handleFile(filename, req);
     res.sendStatus(200);
-  })
+  } catch(e) {
+    next(e);
+  }
+
+  // const upload = uploadFromStream(address, address.endsWith('.ts') ? 'video/MP2T' : 'application/x-mpegURL');
+  // req.pipe(upload.stream)
+  // upload.promise.then(function() {
+  //   res.sendStatus(200);
+  // })
 });
 
 app.use(function(req, res, next) {
